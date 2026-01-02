@@ -17,11 +17,12 @@ A 3DOF hexapod walking robot with 18 servos, 3D-printed frame, and Python contro
 
 ## Hardware
 
-- **18x Tower Pro SG90** - All joints (1.8 kg-cm torque, 9g each)
+- **12x SG90 + 6x MG90S** - Servos (MG90S metal gear for femur joints)
 - **2x PCA9685** - 16-channel PWM drivers (I2C)
-- **Raspberry Pi Zero 2W** or **Pi Pico** - Main controller
-- **3S Li-Ion battery** - 11.1V, 3.5Ah
-- **5V BEC** - Servo power distribution
+- **ESP32 WROOM-32** - Main real-time controller
+- **Raspberry Pi Zero 2W** - Optional, for camera/vision
+- **3S Li-Ion battery** - 11.1V, 1.3-3.5Ah
+- **2x 5V 5A UBEC** - Servo power distribution
 
 ## Leg Geometry
 
@@ -51,12 +52,15 @@ hexapod/
 │   │   ├── leg.scad      # Leg components
 │   │   └── test_leg.scad # Test assembly
 │   ├── src/              # Python control software
-│   │   ├── hexapod.py    # Main controller + IK
+│   │   ├── esp32_main.py # ESP32 controller (MicroPython)
+│   │   ├── zero_main.py  # Pi Zero controller (optional, camera)
+│   │   ├── hexapod.py    # Hexapod class + IK
 │   │   ├── gait.py       # Gait patterns
 │   │   ├── pca9685.py    # PWM driver
 │   │   └── calibrate.py  # Servo calibration
 │   └── PLAN.md           # Detailed project plan
-├── HARDWARE              # Bill of materials
+├── WIRING.md             # Wiring diagram
+├── PURCHASED             # Ordered parts
 └── PRINT_QUEUE.md        # 3D print tracking
 ```
 
