@@ -3,10 +3,31 @@ Hexapod Gait Patterns
 
 Ported from mithi/hexy (Python 2) to Python 3.
 Provides walking, rotation, and body movement patterns.
+
+Optimized for MG90S femur servos with smooth acceleration
+to reduce peak torque and prevent gear stripping.
 """
 
 import math
 from time import sleep
+
+
+# Smooth motion interpolation steps (more = smoother but slower)
+SMOOTH_STEPS = 5
+
+
+def lerp(start, end, t):
+    """Linear interpolation between start and end."""
+    return start + (end - start) * t
+
+
+def ease_in_out(t):
+    """Smooth ease-in-out curve (0 to 1)."""
+    # Cubic ease-in-out
+    if t < 0.5:
+        return 4 * t * t * t
+    else:
+        return 1 - pow(-2 * t + 2, 3) / 2
 
 
 class GaitController:
@@ -15,6 +36,9 @@ class GaitController:
 
     Implements tripod gait (fastest), wave gait (most stable),
     and various body movements.
+
+    Optimized for MG90S servos with smooth acceleration to
+    reduce peak femur torque.
     """
 
     def __init__(self, hexapod):
@@ -37,20 +61,91 @@ class GaitController:
         self.middle_legs = ['L2', 'R2']
         self.back_legs = ['L3', 'R3']
 
-        # Default positions (x, y, z) relative to each leg's origin
-        self.stand_height = 50  # mm below coxa
+        # Default positions - optimized for MG90S femur servos
+        self.stand_height = 40  # mm below coxa (lower = less femur torque)
         self.stance_width = 80  # mm out from body
+
+        # Speed multiplier (0.1 to 1.0) - lower = slower, gentler on servos
+        self.speed = 0.8
+
+        # Smooth motion control
+        self.smooth_motion = True  # Enable smooth ramping
+        self.smooth_steps = SMOOTH_STEPS
+
+    # =========================================================================
+    # Smooth Motion Helpers
+    # =========================================================================
+
+    def _smooth_move_leg(self, leg, target_x, target_y, target_z, duration=0.1):
+        """
+        Move leg smoothly with acceleration ramping.
+
+        Reduces peak torque on femur servos by avoiding instant position jumps.
+
+        Args:
+            leg: Leg name
+            target_x, target_y, target_z: Target position
+            duration: Total movement time (seconds)
+        """
+        if not self.smooth_motion or self.smooth_steps <= 1:
+            self.hex.move_leg(leg, target_x, target_y, target_z)
+            return
+
+        start_x, start_y, start_z = self.hex.leg_positions[leg]
+        step_delay = duration / self.smooth_steps
+
+        for i in range(1, self.smooth_steps + 1):
+            t = ease_in_out(i / self.smooth_steps)
+            x = lerp(start_x, target_x, t)
+            y = lerp(start_y, target_y, t)
+            z = lerp(start_z, target_z, t)
+            self.hex.move_leg(leg, x, y, z)
+            if i < self.smooth_steps:
+                sleep(step_delay)
+
+    def _smooth_move_legs(self, leg_targets, duration=0.1):
+        """
+        Move multiple legs smoothly in parallel.
+
+        Args:
+            leg_targets: Dict of {leg_name: (x, y, z)}
+            duration: Total movement time
+        """
+        if not self.smooth_motion or self.smooth_steps <= 1:
+            for leg, (x, y, z) in leg_targets.items():
+                self.hex.move_leg(leg, x, y, z)
+            return
+
+        # Capture start positions
+        start_positions = {}
+        for leg in leg_targets:
+            start_positions[leg] = self.hex.leg_positions[leg]
+
+        step_delay = duration / self.smooth_steps
+
+        for i in range(1, self.smooth_steps + 1):
+            t = ease_in_out(i / self.smooth_steps)
+            for leg, (target_x, target_y, target_z) in leg_targets.items():
+                start_x, start_y, start_z = start_positions[leg]
+                x = lerp(start_x, target_x, t)
+                y = lerp(start_y, target_y, t)
+                z = lerp(start_z, target_z, t)
+                self.hex.move_leg(leg, x, y, z)
+            if i < self.smooth_steps:
+                sleep(step_delay)
 
     # =========================================================================
     # Basic Movements
     # =========================================================================
 
     def stand(self, height=None):
-        """Move to neutral standing position."""
+        """Move to neutral standing position with smooth motion."""
         h = height or self.stand_height
+        targets = {}
         for leg in self.hex.leg_positions.keys():
             x, y, _ = self.hex.leg_positions[leg]
-            self.hex.move_leg(leg, x, y, -h)
+            targets[leg] = (x, y, -h)
+        self._smooth_move_legs(targets, duration=0.3 / self.speed)
 
     def reset_positions(self):
         """
@@ -87,18 +182,25 @@ class GaitController:
     # Tripod Gait (Walking)
     # =========================================================================
 
-    def walk(self, direction=0, steps=4, step_length=40, step_height=30,
-             cycle_time=0.4):
+    def walk(self, direction=0, steps=4, step_length=35, step_height=25,
+             cycle_time=None):
         """
         Walk using tripod gait.
+
+        Note: Tripod gait puts more load on femur servos (only 3 legs support).
+        For MG90S servos, consider using wave_walk() instead.
 
         Args:
             direction: Movement direction in degrees (0=forward, 180=backward)
             steps: Number of complete gait cycles
-            step_length: How far each step moves (mm)
-            step_height: How high to lift legs (mm)
-            cycle_time: Time for one complete cycle (seconds)
+            step_length: How far each step moves (mm) - reduced for less torque
+            step_height: How high to lift legs (mm) - reduced for less torque
+            cycle_time: Time for one complete cycle (seconds), auto-scaled by speed
         """
+        # Scale cycle time by speed (slower = gentler)
+        if cycle_time is None:
+            cycle_time = 0.5 / self.speed
+
         # Convert direction to x/y components
         rad = math.radians(direction)
         dx = step_length * math.cos(rad)
@@ -267,21 +369,26 @@ class GaitController:
     # Wave Gait (slower but more stable)
     # =========================================================================
 
-    def wave_walk(self, direction=0, steps=2, step_length=30, step_height=30,
-                  leg_time=0.15):
+    def wave_walk(self, direction=0, steps=2, step_length=25, step_height=20,
+                  leg_time=None):
         """
         Walk using wave gait (one leg at a time).
 
-        More stable than tripod but slower. Good for rough terrain.
-        Always maintains 5 legs on ground for maximum stability.
+        RECOMMENDED FOR MG90S FEMUR SERVOS:
+        - Always 5 legs on ground = 40% less load per leg vs tripod
+        - Slower but much gentler on servos
+        - Better stability on uneven surfaces
 
         Args:
             direction: Movement direction (0=forward)
             steps: Number of complete cycles
-            step_length: Step size in mm
-            step_height: Lift height in mm
-            leg_time: Time per leg movement
+            step_length: Step size in mm (smaller = less torque)
+            step_height: Lift height in mm (smaller = less torque)
+            leg_time: Time per leg movement, auto-scaled by speed
         """
+        # Scale timing by speed
+        if leg_time is None:
+            leg_time = 0.2 / self.speed
         rad = math.radians(direction)
         dx = step_length * math.cos(rad)
         dy = step_length * math.sin(rad)
@@ -412,19 +519,28 @@ class RippleGait:
     Ripple gait - legs move in wave-like pattern.
 
     Sequence: R1 -> R2 -> R3 -> L3 -> L2 -> L1
-    Always 4+ legs on ground for maximum stability.
+    Always 4+ legs on ground for good stability.
+
+    Good balance between speed and femur torque load.
     """
 
     def __init__(self, hexapod):
         self.hex = hexapod
         self.sequence = ['R1', 'R2', 'R3', 'L3', 'L2', 'L1']
-        self.stand_height = 50
+        self.stand_height = 40  # Lower stance for less femur torque
+        self.speed = 0.8
 
-    def walk(self, direction=0, steps=2, step_length=25, step_height=25,
-             phase_time=0.1):
+    def walk(self, direction=0, steps=2, step_length=22, step_height=18,
+             phase_time=None):
         """
         Ripple walk - smoother than wave, more stable than tripod.
+
+        4 legs always on ground = 33% less load than tripod.
         """
+        # Scale timing by speed
+        if phase_time is None:
+            phase_time = 0.12 / self.speed
+
         rad = math.radians(direction)
         dx = step_length * math.cos(rad)
         dy = step_length * math.sin(rad)
