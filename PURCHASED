@@ -1,9 +1,49 @@
-HiLetgo ESP-WROOM-32 ESP32 ESP-32S Development Board 2.4GHz Dual-Mode WiFi + Bluetooth Dual Cores Microcontroller Processor Integrated with Antenna RF AMP Filter AP STA for Arduino IDE
+# Hexapod Parts - Purchased
 
-4Pcs SG90 9g Micro Servos for RC Robot Helicopter Airplane Controls Car Boat
+## From Inventory (Already Owned)
 
-HiLetgo 3pcs GY-521 MPU-6050 MPU6050 3 Axis Accelerometer Gyroscope Module 6 DOF 6-axis Accelerometer Gyroscope Sensor Module 16 Bit AD Converter Data Output IIC I2C for Arduino
+| Item | Qty | Notes |
+|------|-----|-------|
+| Tower Pro SG90 | 15 | From existing stock (need 12) |
+| PCA9685 16-ch PWM | 2 | I2C addresses 0x40, 0x41 |
+| Pi Camera v1.3 | 1 | 5MP OV5647 |
+| 3S Li-Ion (Titan) | 1 | 11.1V 3.5Ah |
+| 3S Li-Ion (Glacier) | 1 | 11.1V 1300mAh (testing) |
 
-HiLetgo 2pcs INA219 I2C Bi-Directional DC Current Power Supply Sensor Breakout Module
+## Ordered from Amazon
 
-5Pcs VL53L0X Time-of-Flight (ToF) 940nm Laser Ranging Sensor Breakout GY-VL53L0XV2 Distance Measurement Module IIC for Arduino
+| Item | Qty | Price | Notes |
+|------|-----|-------|-------|
+| HiLetgo ESP-WROOM-32 | 1 | ~$8 | Main controller |
+| HiLetgo MPU-6050 | 3-pack | ~$8 | IMU (only need 1) |
+| HiLetgo INA219 | 2-pack | ~$7 | Battery monitor (only need 1) |
+| VL53L0X ToF | 5-pack | ~$15 | Distance sensors (need 3) |
+| SG90 Micro Servo | 4-pack | ~$8 | Spares |
+| AYWHP MG90S | 6-pack | ~$16 | Femur joints (metal gear) |
+| Raspberry Pi Zero 2W | 1 | ~$20 | Optional vision/camera |
+| SoloGood 5V 5A UBEC | 2-pack | ~$12 | Servo power (one per PCA) |
+| MakerFocus Pi Zero Camera Cable | 1 | ~$6 | 22-pin to 15-pin adapter |
+
+## Total Estimated Cost
+
+| Category | Amount |
+|----------|--------|
+| Amazon orders | ~$100 |
+| From inventory | $0 |
+| **Total** | ~$100 |
+
+## Still Needed
+
+| Item | Est. Cost | Notes |
+|------|-----------|-------|
+| M2/M2.5 hardware kit | ~$10 | Servo mounting screws |
+| Servo wire extensions | ~$5 | 15-20cm leads |
+
+## Servo Allocation
+
+| Joint | Servo | Qty | Notes |
+|-------|-------|-----|-------|
+| Coxa | SG90 | 6 | Horizontal rotation |
+| Femur | MG90S | 6 | Vertical lift (high torque) |
+| Tibia | SG90 | 6 | Vertical extend |
+| **Total** | | **18** | 12× SG90 + 6× MG90S |

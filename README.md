@@ -2,7 +2,7 @@
 
 ![Hexapod Robot](hex.png)
 
-A 3DOF hexapod walking robot with 18 servos, 3D-printed frame, and Python control software.
+A 3DOF hexapod walking robot with 18 servos, 3D-printed frame, and MicroPython control software.
 
 ## Specifications
 
@@ -10,19 +10,32 @@ A 3DOF hexapod walking robot with 18 servos, 3D-printed frame, and Python contro
 |------|-------|
 | Legs | 6 |
 | DOF per leg | 3 (coxa, femur, tibia) |
-| Total servos | 18 |
+| Total servos | 18 (12× SG90 + 6× MG90S) |
 | Body size | ~200-250mm across |
-| Leg reach | ~150mm from body center |
-| Gait types | Tripod, wave, ripple |
+| Leg reach | ~130mm from body center |
+| Weight | ~500g |
+| Gait types | Tripod, wave (recommended), ripple |
 
 ## Hardware
 
-- **12x SG90 + 6x MG90S** - Servos (MG90S metal gear for femur joints)
-- **2x PCA9685** - 16-channel PWM drivers (I2C)
-- **ESP32 WROOM-32** - Main real-time controller
+### Controllers
+- **ESP32 WROOM-32** - Main real-time controller (servos, sensors, WiFi/BT)
 - **Raspberry Pi Zero 2W** - Optional, for camera/vision
-- **3S Li-Ion battery** - 11.1V, 1.3-3.5Ah
-- **2x 5V 5A UBEC** - Servo power distribution
+
+### Servos
+- **12× SG90** - Coxa and tibia joints (plastic gear, 1.8 kg-cm)
+- **6× MG90S** - Femur joints (metal gear, 2.2 kg-cm)
+
+### Power
+- **3S Li-Ion battery** - 11.1V (Glacier 1300mAh for testing, Titan 3.5Ah for runtime)
+- **2× SoloGood 5V 5A UBEC** - Servo power (one per PCA9685)
+
+### Drivers & Sensors
+- **2× PCA9685** - 16-channel PWM drivers (I2C addresses 0x40, 0x41)
+- **MPU6050** - IMU for balance/orientation
+- **3× VL53L0X** - ToF distance sensors (front, left, right)
+- **INA219** - Battery voltage/current monitoring
+- **Pi Camera v1.3** - Optional, requires Pi Zero
 
 ## Leg Geometry
 

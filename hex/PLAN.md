@@ -2,7 +2,7 @@
 
 ## Overview
 
-3DOF hexapod walker using existing servo inventory and 3D printed frame.
+3DOF hexapod walker using ESP32 controller, mixed servo configuration, and 3D printed frame.
 
 ## Specifications
 
@@ -10,43 +10,55 @@
 |------|-------|
 | Legs | 6 |
 | DOF per leg | 3 (coxa, femur, tibia) |
-| Total servos | 18 |
-| Gait types | Tripod, wave, ripple |
-| Target size | ~250mm body, ~150mm leg reach |
+| Total servos | 18 (12× SG90 + 6× MG90S) |
+| Gait types | Tripod, wave (recommended), ripple |
+| Body size | ~200-250mm across |
+| Leg reach | ~130mm from body center |
 
 ## Parts Allocation
 
-### From Inventory
+### Controllers
 
 | Part | Qty | Use | Notes |
 |------|-----|-----|-------|
-| Tower Pro SG90 | 18 | All joints (coxa, femur, tibia) | 1.8 kg-cm torque, keep robot lightweight |
-| PCA9685 | 2 | PWM control | 16ch each = 32ch total (18 needed) |
-| SpeedyBee F405 or Arduino | 1 | Main controller | Or use Pi Zero/Pi Pico |
-| 3S Li-Ion (Titan) | 1 | Power | 11.1V, 3.5Ah - good runtime |
-| FTDI adapter | 1 | Programming/debug | |
+| ESP32 WROOM-32 | 1 | Main controller | Real-time servo control, WiFi/BT |
+| Pi Zero 2W | 1 | Vision (optional) | Camera, path planning |
 
-### To Purchase
+### Servos
 
-| Part | Est. Cost | Notes |
-|------|-----------|-------|
-| Pi Pico or Pi Zero 2W | $5-15 | Recommended controller |
-| Buck converter 5V/5A | $5-10 | Servo power (BEC) |
-| Servo wire extensions | $5 | 15-20cm leads |
-| M2/M2.5 hardware kit | $10 | Servo mounting screws |
-| **Total** | ~$25-40 | |
+| Part | Qty | Use | Notes |
+|------|-----|-----|-------|
+| SG90 | 12 | Coxa + tibia joints | 1.8 kg-cm, plastic gear |
+| MG90S | 6 | Femur joints | 2.2 kg-cm, metal gear |
+
+### Power
+
+| Part | Qty | Use | Notes |
+|------|-----|-----|-------|
+| 3S Li-Ion (Titan) | 1 | Main power | 11.1V 3.5Ah (runtime) |
+| 3S Li-Ion (Glacier) | 1 | Testing | 11.1V 1300mAh (lighter) |
+| SoloGood 5V 5A UBEC | 2 | Servo power | One per PCA9685 |
+
+### Electronics
+
+| Part | Qty | Use | Notes |
+|------|-----|-----|-------|
+| PCA9685 | 2 | PWM drivers | 0x40 and 0x41 |
+| MPU6050 | 1 | IMU | Balance/orientation |
+| VL53L0X | 3 | ToF distance | Front, left, right |
+| INA219 | 1 | Power monitor | Battery voltage/current |
+| Pi Camera v1.3 | 1 | Vision | Requires Zero |
 
 ### To 3D Print
 
 | Part | Qty | Material | Notes |
 |------|-----|----------|-------|
-| Body plate (top) | 1 | PLA/PETG | Hex shape, ~200mm across |
-| Body plate (bottom) | 1 | PLA/PETG | Electronics mount |
-| Coxa bracket | 6 | PLA/PETG | Hip rotation mount |
-| Femur link | 6 | PLA/PETG | Upper leg, ~60mm |
-| Tibia link | 6 | PLA/PETG | Lower leg, ~80mm |
-| Foot tip | 6 | TPU | Rubber for grip (optional) |
-| Servo horn adapters | 18 | PLA | If needed for fit |
+| Body plate (top) | 1 | PLA | Hex shape |
+| Body plate (bottom) | 1 | PLA | Electronics mount |
+| Coxa bracket | 6 | PLA Light | 15% infill, 2 walls |
+| Femur link | 6 | PLA Light | 15% infill, 2 walls |
+| Tibia link | 6 | PLA Light | 15% infill, 2 walls |
+| Foot tip | 6 | TPU | Flexible for grip |
 
 ## Leg Geometry
 
@@ -56,15 +68,15 @@
       +---------+
       |  COXA   |  <- SG90 (horizontal rotation)
       +---------+
-           |
+           | 25mm
       +---------+
-      |  FEMUR  |  <- SG90 (vertical lift)
+      |  FEMUR  |  <- MG90S (vertical lift) - metal gear for torque
       +---------+
-           |
+           | 55mm
       +---------+
       |  TIBIA  |  <- SG90 (vertical extend)
       +---------+
-           |
+           | 75mm
          [FOOT]
 ```
 
@@ -75,45 +87,45 @@
 ```
 3S Li-Ion (11.1V)
     |
-    +---> Buck Converter ---> 5V rail
-              |
-              +---> PCA9685 #1 V+ (servos 0-11)
-              +---> PCA9685 #2 V+ (servos 12-17)
-              +---> Controller (Pi Pico 5V or VSYS)
-```
-
-### I2C Bus
-
-```
-Controller (Pi Pico / Pi Zero)
+    +---> UBEC #1 (5V 5A) ---> PCA9685 #1 (L1-L3, R1) + ESP32
     |
-    +-- SDA (GPIO 2) ----+---- PCA9685 #1 (0x40)
-    |                    |
-    +-- SCL (GPIO 3) ----+---- PCA9685 #2 (0x41) <- solder A0 jumper
+    +---> UBEC #2 (5V 5A) ---> PCA9685 #2 (R2-R3) + Pi Zero [optional]
+```
+
+### I2C Bus (ESP32 as Master)
+
+```
+ESP32
+    |
+    +-- GPIO21 (SDA) ----+---- PCA9685 #1 (0x40)
+    |                    +---- PCA9685 #2 (0x41)
+    +-- GPIO22 (SCL) ----+---- MPU6050 (0x68)
+                         +---- VL53L0X x3 (0x29, 0x30, 0x31)
+                         +---- INA219 (0x44)
 ```
 
 ### Servo Channel Mapping
 
-| PCA9685 | Ch | Leg | Joint |
-|---------|-----|-----|-------|
-| #1 | 0 | L1 | Coxa |
-| #1 | 1 | L1 | Femur |
-| #1 | 2 | L1 | Tibia |
-| #1 | 3 | L2 | Coxa |
-| #1 | 4 | L2 | Femur |
-| #1 | 5 | L2 | Tibia |
-| #1 | 6 | L3 | Coxa |
-| #1 | 7 | L3 | Femur |
-| #1 | 8 | L3 | Tibia |
-| #1 | 9 | R1 | Coxa |
-| #1 | 10 | R1 | Femur |
-| #1 | 11 | R1 | Tibia |
-| #2 | 0 | R2 | Coxa |
-| #2 | 1 | R2 | Femur |
-| #2 | 2 | R2 | Tibia |
-| #2 | 3 | R3 | Coxa |
-| #2 | 4 | R3 | Femur |
-| #2 | 5 | R3 | Tibia |
+| PCA9685 | Ch | Leg | Joint | Servo |
+|---------|-----|-----|-------|-------|
+| #1 | 0 | L1 | Coxa | SG90 |
+| #1 | 1 | L1 | Femur | MG90S |
+| #1 | 2 | L1 | Tibia | SG90 |
+| #1 | 3 | L2 | Coxa | SG90 |
+| #1 | 4 | L2 | Femur | MG90S |
+| #1 | 5 | L2 | Tibia | SG90 |
+| #1 | 6 | L3 | Coxa | SG90 |
+| #1 | 7 | L3 | Femur | MG90S |
+| #1 | 8 | L3 | Tibia | SG90 |
+| #1 | 9 | R1 | Coxa | SG90 |
+| #1 | 10 | R1 | Femur | MG90S |
+| #1 | 11 | R1 | Tibia | SG90 |
+| #2 | 0 | R2 | Coxa | SG90 |
+| #2 | 1 | R2 | Femur | MG90S |
+| #2 | 2 | R2 | Tibia | SG90 |
+| #2 | 3 | R3 | Coxa | SG90 |
+| #2 | 4 | R3 | Femur | MG90S |
+| #2 | 5 | R3 | Tibia | SG90 |
 
 ### Leg Numbering (top view)
 
@@ -131,70 +143,71 @@ Controller (Pi Pico / Pi Zero)
 
 ## Software Architecture
 
-### Option A: Pi Pico (MicroPython)
+### ESP32 (MicroPython) - Real-Time Control
 
 ```
-main.py
-├── hexapod.py      # Leg kinematics, gait engine
-├── servo.py        # PCA9685 wrapper
-├── gait.py         # Tripod, wave, ripple patterns
-└── remote.py       # Bluetooth/serial control
+hex/src/
+├── esp32_main.py    # Main controller loop, UART commands
+├── hexapod.py       # Leg kinematics, IK solver
+├── gait.py          # Tripod, wave, ripple patterns
+├── pca9685.py       # PWM driver
+├── mpu6050.py       # IMU driver
+├── vl53l0x.py       # Distance sensor driver
+├── ina219.py        # Battery monitor
+└── calibrate.py     # Servo calibration tool
 ```
 
-### Option B: Pi Zero 2W (Python + ROS2)
+### Pi Zero (Python) - Optional Vision [OPTIONAL]
 
 ```
-hex_ws/src/
-├── hex_control/        # Servo control node
-├── hex_kinematics/     # IK solver
-├── hex_gait/           # Gait generator
-└── hex_teleop/         # Joystick/keyboard control
+hex/src/
+└── zero_main.py     # Camera, path planning, web UI
 ```
 
-### Inverse Kinematics
-
-Each leg needs IK to convert (x, y, z) foot position to servo angles:
+### Default Settings (Optimized for MG90S Femur)
 
 ```python
-def leg_ik(x, y, z, coxa_len, femur_len, tibia_len):
-    """
-    x: forward/back from coxa
-    y: left/right from coxa
-    z: up/down from coxa
-    Returns: (coxa_angle, femur_angle, tibia_angle) in degrees
-    """
-    # Coxa angle (top-down rotation)
-    coxa_angle = atan2(y, x)
+DEFAULT_GAIT = 'wave'       # 5 legs down = less load per leg
+DEFAULT_HEIGHT = 40         # Lower stance = less femur torque
+DEFAULT_SPEED = 0.8         # Slower = less dynamic load
+```
 
-    # Distance in XY plane
-    xy_dist = sqrt(x**2 + y**2) - coxa_len
+### UART Protocol (ESP32 ↔ Zero)
 
-    # Distance to foot
-    foot_dist = sqrt(xy_dist**2 + z**2)
+```
+Commands (115200 baud, 8N1):
+    W:<dx>,<dy>     Walk in direction (mm)
+    T:<angle>       Turn in place (degrees)
+    S               Stop
+    G:<gait>        Set gait (tripod, wave, ripple)
+    H:<height>      Set standing height (mm)
+    V:<speed>       Set speed (0.0-1.0)
+    C               Center all servos
+    B               Boot up sequence
+    D               Shut down sequence
+    ?               Query status
 
-    # Femur and tibia angles (2-link planar IK)
-    # Law of cosines
-    cos_tibia = (femur_len**2 + tibia_len**2 - foot_dist**2) / (2 * femur_len * tibia_len)
-    tibia_angle = acos(clamp(cos_tibia, -1, 1))
-
-    cos_femur = (femur_len**2 + foot_dist**2 - tibia_len**2) / (2 * femur_len * foot_dist)
-    femur_angle = atan2(z, xy_dist) + acos(clamp(cos_femur, -1, 1))
-
-    return degrees(coxa_angle), degrees(femur_angle), degrees(tibia_angle)
+Responses:
+    OK
+    OK:<data>
+    ERR:<message>
+    IMU:<roll>,<pitch>,<yaw>
+    DIST:<front>,<left>,<right>
+    BAT:<voltage>,<current>,<soc>
 ```
 
 ## Build Phases
 
 ### Phase 1: Design and Print
-- [ ] Design body plates in CAD (Fusion 360 / OpenSCAD)
-- [ ] Design leg segments with servo pockets
+- [x] Design body plates in CAD (OpenSCAD)
+- [x] Design leg segments with servo pockets
 - [ ] Print test leg (1x) to verify fit
 - [ ] Print remaining parts
 
 ### Phase 2: Electronics
 - [ ] Test PCA9685 with single servo
 - [ ] Set second PCA9685 to address 0x41
-- [ ] Wire power distribution
+- [ ] Wire power distribution (dual UBEC)
 - [ ] Test all 18 servos individually
 
 ### Phase 3: Assembly
@@ -205,31 +218,31 @@ def leg_ik(x, y, z, coxa_len, femur_len, tibia_len):
 - [ ] Mount electronics in body
 
 ### Phase 4: Software
+- [x] Create ESP32 controller (esp32_main.py)
+- [x] Implement smooth gait interpolation
 - [ ] Servo calibration (center positions)
 - [ ] Single leg IK test
 - [ ] Standing pose (all legs)
-- [ ] Basic tripod gait
-- [ ] Remote control integration
+- [ ] Basic wave gait test
 
 ### Phase 5: Refinement
 - [ ] Tune gait parameters
-- [ ] Add wave/ripple gaits
-- [ ] Battery monitoring
-- [ ] Optional: IMU for balance
+- [ ] Battery monitoring alerts
+- [ ] Optional: IMU balance correction
+- [ ] Optional: Pi Zero camera integration
 
 ## Reference Dimensions
 
-Based on SG90 servo size (all 18 servos):
-
 | Servo | Size (mm) | Weight | Torque |
 |-------|-----------|--------|--------|
-| SG90 | 23 x 12 x 29 | 9g | 1.8 kg-cm |
+| SG90 | 23 × 12 × 29 | 9g | 1.8 kg-cm |
+| MG90S | 23 × 12 × 29 | 14g | 2.2 kg-cm |
 
-Suggested link lengths:
-- Coxa: 25mm (short, just clears body)
-- Femur: 50-60mm
-- Tibia: 70-80mm
-- Total reach: ~150mm from body center
+Link lengths:
+- Coxa: 25mm (short, clears body)
+- Femur: 55mm
+- Tibia: 75mm
+- Total reach: ~130mm from body center
 
 ## Resources
 
@@ -239,4 +252,4 @@ Suggested link lengths:
 
 ---
 
-*Created: 2025-12-28*
+*Updated: 2026-01-02*
